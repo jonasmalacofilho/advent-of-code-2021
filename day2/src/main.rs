@@ -1,11 +1,15 @@
-fn main() {
+use eyre::{bail, ensure, eyre, Context, Result};
+
+fn main() -> Result<()> {
     println!("--- Day 2: Dive! ---");
 
     let input = include_str!("../input.txt");
-    let data = parse(input);
+    let data = parse(input)?;
 
     println!("Final position: {}", final_position(&data));
     println!("Final position, fixed: {}", final_position_fixed(&data));
+
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -15,27 +19,33 @@ enum Command {
     Up(isize),
 }
 
-fn parse(input: &str) -> Vec<Command> {
+fn parse(input: &str) -> Result<Vec<Command>> {
     input
         .lines()
         .map(|line| {
             let mut parts = line.split(' ');
 
-            let command = parts.next().expect("missing command");
+            let command = parts
+                .next()
+                .ok_or_else(|| eyre!("missing command in line `{}`", line))?;
             let amount = parts
                 .next()
-                .expect("missing amount")
+                .ok_or_else(|| eyre!("missing amount in line `{}`", line))?;
+
+            let amount = amount
                 .parse::<isize>()
-                .expect("cannot parse amount");
+                .wrap_err_with(|| format!("could not parse `{}` as amount", amount))?;
 
-            assert_eq!(parts.next(), None, "found trailing data");
+            ensure!(parts.next().is_none(), "trailing data in line `{}`", line);
 
-            match command {
+            let cmd = match command {
                 "forward" => Command::Forward(amount),
                 "down" => Command::Down(amount),
                 "up" => Command::Up(amount),
-                _ => panic!("unknown command: {}", command),
-            }
+                _ => bail!("unknown command `{}`", command),
+            };
+
+            Ok(cmd)
         })
         .collect()
 }
@@ -95,20 +105,20 @@ mod tests {
         use Command::*;
 
         assert_eq!(
-            parse(SAMPLE),
+            parse(SAMPLE).unwrap(),
             vec![Forward(5), Down(5), Forward(8), Up(3), Down(8), Forward(2)]
         );
     }
 
     #[test]
     fn solves_the_first_example() {
-        let data = parse(SAMPLE);
+        let data = parse(SAMPLE).unwrap();
         assert_eq!(final_position(&data), 150);
     }
 
     #[test]
     fn solves_the_second_example() {
-        let data = parse(SAMPLE);
+        let data = parse(SAMPLE).unwrap();
         assert_eq!(final_position_fixed(&data), 900);
     }
 }
