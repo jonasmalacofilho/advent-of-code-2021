@@ -25,18 +25,14 @@ fn parse(input: &str) -> Result<Vec<Command>> {
         .map(|line| {
             let mut parts = line.split(' ');
 
-            let command = parts
-                .next()
-                .ok_or_else(|| eyre!("missing command in line `{}`", line))?;
-            let amount = parts
-                .next()
-                .ok_or_else(|| eyre!("missing amount in line `{}`", line))?;
+            let command = parts.next().ok_or_else(|| eyre!("missing command"))?;
+            let amount = parts.next().ok_or_else(|| eyre!("missing amount"))?;
 
             let amount = amount
                 .parse::<isize>()
                 .wrap_err_with(|| format!("could not parse `{}` as amount", amount))?;
 
-            ensure!(parts.next().is_none(), "trailing data in line `{}`", line);
+            ensure!(parts.next().is_none(), "trailing data");
 
             let cmd = match command {
                 "forward" => Command::Forward(amount),
@@ -47,6 +43,8 @@ fn parse(input: &str) -> Result<Vec<Command>> {
 
             Ok(cmd)
         })
+        .zip(1..)
+        .map(|(res, lineno)| res.wrap_err_with(|| format!("could not parse line {}", lineno)))
         .collect()
 }
 
