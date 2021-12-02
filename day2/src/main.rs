@@ -27,12 +27,11 @@ fn parse(input: &str) -> Result<Vec<Command>> {
 
             let command = parts.next().ok_or_else(|| eyre!("missing command"))?;
             let amount = parts.next().ok_or_else(|| eyre!("missing amount"))?;
+            ensure!(parts.next().is_none(), "found trailing data");
 
             let amount = amount
                 .parse::<isize>()
                 .wrap_err_with(|| format!("could not parse `{}` as amount", amount))?;
-
-            ensure!(parts.next().is_none(), "trailing data");
 
             let cmd = match command {
                 "forward" => Command::Forward(amount),
