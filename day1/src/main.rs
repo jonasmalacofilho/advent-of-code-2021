@@ -98,4 +98,13 @@ mod tests {
 
         assert_eq!(increased_with_window(&depths), 5);
     }
+
+    #[test]
+    fn does_not_regress() {
+        let input = include_str!("../input.txt");
+        let data = parse_depths(input).unwrap();
+
+        assert_eq!(increased(&data), 1475);
+        assert_eq!(increased_with_window(&data), 1516);
+    }
 }
