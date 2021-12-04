@@ -118,4 +118,13 @@ mod tests {
         let data = parse(SAMPLE).unwrap();
         assert_eq!(final_position_fixed(&data), 900);
     }
+
+    #[test]
+    fn does_not_regress() {
+        let input = include_str!("../input.txt");
+        let data = parse(input).unwrap();
+
+        assert_eq!(final_position(&data), 2027977);
+        assert_eq!(final_position_fixed(&data), 1903644897);
+    }
 }
