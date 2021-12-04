@@ -1,118 +1,136 @@
-use eyre::{bail, ensure, eyre, Context, Result};
+use eyre::{Context, Result};
 
 fn main() -> Result<()> {
-    println!("--- Day 3 ---");
+    println!("--- Day 3: Binary Diagnostic ---");
 
     let input = include_str!("../input.txt");
-    let data = parse(input)?;
+    let mut data = parse(input)?;
 
-    println!("Part 1: {}", part1(&data));
-    println!("Part 2: {}", part2(&data));
+    println!("Power consumption: {}", power_consumption(&data));
+    println!("Life support rating: {}", life_support_rating(&mut data));
 
     Ok(())
 }
 
-type Input = usize;
-type Output = usize;
+type Value = u16;
 
-fn parse(input: &str) -> Result<Vec<Input>> {
+fn parse(input: &str) -> Result<Vec<Value>> {
     input
         .lines()
         .map(|line| {
-            usize::from_str_radix(line, 2).wrap_err_with(|| format!("could not parse: {}", line))
+            Value::from_str_radix(line, 2).wrap_err_with(|| format!("could not parse: {}", line))
         })
         .zip(1..)
-        .map(|(res, lineno): (Result<Input>, usize)| {
+        .map(|(res, lineno): (Result<Value>, usize)| {
             res.wrap_err_with(|| format!("could not parse line {}", lineno))
         })
         .collect()
 }
 
-fn ones(data: &[Input]) -> [usize; usize::BITS as _] {
-    let mut ones = [0usize; usize::BITS as _];
+fn power_consumption(data: &[Value]) -> usize {
+    let mut gamma = 0;
+    let mut epsilon = 0;
+    let half = data.len() / 2;
+
+    for count in bit_counts(data).into_iter().rev() {
+        gamma <<= 1;
+        epsilon <<= 1;
+
+        if count > half {
+            gamma |= 1;
+        } else if count > 0 {
+            epsilon |= 1;
+        } else {
+            // Bit not in use, ignore
+        }
+    }
+
+    eprintln!("gamma = {:b}, epsilon = {:b}", gamma, epsilon);
+    gamma * epsilon
+}
+
+fn bit_counts(data: &[Value]) -> [usize; Value::BITS as _] {
+    let mut counts = [0usize; Value::BITS as _];
 
     for report in data {
-        for (i, count) in ones.iter_mut().enumerate() {
-            if report & (1 << i) != 0 {
+        for (bit, count) in counts.iter_mut().enumerate() {
+            if report & (1 << bit) != 0 {
                 *count += 1;
             }
         }
     }
 
-    ones
+    counts
 }
 
-fn compress(data: &[Input]) -> (usize, usize) {
-    let mut gamma = 0;
-    let mut epsilon = 0;
-    let threshold = data.len() / 2;
+fn life_support_rating(data: &mut [Value]) -> usize {
+    data.sort_unstable();
 
-    for count in ones(data).into_iter().rev() {
-        gamma <<= 1;
-        epsilon <<= 1;
+    let o2generation = find_with(BitCriteria::WithMostCommonBits, data);
+    let co2scrubbing = find_with(BitCriteria::WithLeastCommonBits, data);
 
-        if count > threshold {
-            gamma |= 1;
-        } else if count > 0 {
-            epsilon |= 1;
-        }
-    }
-
-    (gamma, epsilon)
+    eprintln!(
+        "o2generation = {:b}, co2scrubbing = {:b}",
+        o2generation, co2scrubbing
+    );
+    o2generation as usize * co2scrubbing as usize
 }
 
-fn part1(data: &[Input]) -> Output {
-    let (gamma, epsilon) = compress(data);
-    eprintln!("gamma = {:b}, epsilon = {:b}", gamma, epsilon);
-    gamma * epsilon
+enum BitCriteria {
+    WithMostCommonBits,
+    WithLeastCommonBits,
 }
 
-fn compute(sorted_data: &[Input], most: bool) -> Input {
-    let mut part = sorted_data;
-    let mut b: usize = 1 << (usize::BITS - 1);
+/// Finds values of interest by successively filtering using most/least bit criteria.
+///
+/// As the name implies, `sorted_data` must be sorted, otherwise the returned value will be
+/// meaningless.
+fn find_with(criteria: BitCriteria, sorted_data: &[Value]) -> Value {
+    let mut rest = sorted_data;
 
-    for bit in (0..usize::BITS).rev() {
-        if part.len() == 1 {
+    for bit in (0..Value::BITS).rev() {
+        if rest.len() == 1 {
+            // Found it, done
             break;
         }
 
-        let p = part.partition_point(|&x| x & (1 << bit) == 0);
+        // Since `rest` is sorted, all values before index `p` have this bit set to zero, and all
+        // values with indices equal or above `p` have this bit set to one
+        let p = rest.partition_point(|&x| x & (1 << bit) == 0);
+        let have_zero = &rest[..p];
+        let have_one = &rest[p..];
 
-        if p == part.len() {
+        if p == rest.len() {
+            // Bit not in use, ignore
             continue;
         }
 
-        let zeros_at_bit = &part[..p];
-        let ones_at_bit = &part[p..];
-
-        if most {
-            if ones_at_bit.len() >= zeros_at_bit.len() {
-                part = ones_at_bit;
-            } else {
-                part = zeros_at_bit;
+        // Successively pick the partition with this bit set to the most/least common value
+        match criteria {
+            BitCriteria::WithMostCommonBits => {
+                if have_one.len() >= have_zero.len() {
+                    rest = have_one;
+                } else {
+                    rest = have_zero;
+                }
             }
-        } else {
-            if zeros_at_bit.len() <= ones_at_bit.len() {
-                part = zeros_at_bit;
-            } else {
-                part = ones_at_bit;
+            BitCriteria::WithLeastCommonBits => {
+                if have_one.len() >= have_zero.len() {
+                    rest = have_zero;
+                } else {
+                    rest = have_one;
+                }
             }
         }
     }
-    assert_eq!(part.len(), 1);
 
-    part[0]
-}
+    assert_eq!(
+        rest.len(),
+        1,
+        "bit filter exhausted but slice still has more than one element"
+    );
 
-fn part2(data: &[Input]) -> Output {
-    let mut data = data.to_vec();
-    data.sort_unstable();
-
-    let o2generation = compute(&data, true);
-    let co2scrubbing = compute(&data, false);
-
-    eprintln!("o2generation = {:b}, co2scrubbing = {:b}", o2generation, co2scrubbing);
-    o2generation * co2scrubbing
+    rest[0]
 }
 
 #[cfg(test)]
@@ -149,12 +167,21 @@ mod tests {
     #[test]
     fn solves_the_first_example() {
         let data = parse(SAMPLE).unwrap();
-        assert_eq!(part1(&data), 22 * 9);
+        assert_eq!(power_consumption(&data), 22 * 9);
     }
 
     #[test]
     fn solves_the_second_example() {
-        let data = parse(SAMPLE).unwrap();
-        assert_eq!(part2(&data), 23 * 10);
+        let mut data = parse(SAMPLE).unwrap();
+        assert_eq!(life_support_rating(&mut data), 23 * 10);
+    }
+
+    #[test]
+    fn does_not_regress() {
+        let input = include_str!("../input.txt");
+        let mut data = parse(input).unwrap();
+
+        assert_eq!(power_consumption(&data), 2724524);
+        assert_eq!(life_support_rating(&mut data), 2775870);
     }
 }
