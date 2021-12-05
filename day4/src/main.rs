@@ -4,39 +4,28 @@ fn main() -> Result<()> {
     println!("--- Day 4: Giant Squid ---");
 
     let input = include_str!("../input.txt");
-    let mut game = parse(input)?;
+    let game = parse(input)?;
 
-    println!("Score with winning board: {}", winning_board(&mut game));
-
-    game.reset();
-
-    println!("Score with losing board: {}", losing_board(&mut game));
+    println!("Score with winning board: {}", winning_board(game.clone()));
+    println!("Score with losing board: {}", losing_board(game));
 
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Game {
     sequence: Vec<u8>,
     boards: Vec<Board>,
 }
 
-impl Game {
-    pub fn reset(&mut self) {
-        for b in self.boards.iter_mut() {
-            b.reset();
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Board {
     board: [u8; 25],
     marked: [bool; 25],
     done: Option<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum BoardResult {
     Pending,
     Bingo(u32),
@@ -70,11 +59,6 @@ impl Board {
         } else {
             BoardResult::Pending
         }
-    }
-
-    pub fn reset(&mut self) {
-        self.marked = [false; 25];
-        self.done = None;
     }
 
     fn bingo(&self) -> bool {
@@ -172,9 +156,9 @@ fn parse(input: &str) -> Result<Game> {
     Ok(Game { sequence, boards })
 }
 
-fn winning_board(game: &mut Game) -> u32 {
+fn winning_board(mut game: Game) -> u32 {
     for &x in game.sequence.iter() {
-        for game in &mut game.boards {
+        for game in game.boards.iter_mut() {
             if let BoardResult::Bingo(score) = game.mark(x) {
                 return score;
             }
@@ -184,11 +168,11 @@ fn winning_board(game: &mut Game) -> u32 {
     unreachable!()
 }
 
-fn losing_board(game: &mut Game) -> u32 {
+fn losing_board(mut game: Game) -> u32 {
     let mut last_score = 0;
 
     for &x in game.sequence.iter() {
-        for game in &mut game.boards {
+        for game in game.boards.iter_mut() {
             if let BoardResult::Bingo(score) = game.mark(x) {
                 last_score = score;
             }
@@ -278,23 +262,23 @@ mod tests {
 
     #[test]
     fn solves_the_first_example() {
-        let mut game = parse(SAMPLE).unwrap();
-        assert_eq!(winning_board(&mut game), 188 * 24);
+        let game = parse(SAMPLE).unwrap();
+        assert_eq!(winning_board(game), 188 * 24);
     }
 
     #[test]
     fn solves_the_second_example() {
-        let mut game = parse(SAMPLE).unwrap();
-        assert_eq!(losing_board(&mut game), 148 * 13);
+        let game = parse(SAMPLE).unwrap();
+        assert_eq!(losing_board(game), 148 * 13);
     }
 
     #[test]
     fn does_not_regress() {
         let input = include_str!("../input.txt");
-        let mut game = parse(input).unwrap();
+        let game = parse(input).unwrap();
 
-        assert_eq!(winning_board(&mut game), 2496);
-        assert_eq!(losing_board(&mut game), 25925);
+        assert_eq!(winning_board(game.clone()), 2496);
+        assert_eq!(losing_board(game), 25925);
     }
 
     #[test]
@@ -311,18 +295,12 @@ mod tests {
         ];
         let sequence = vec![0, 1, 2, 3, 99];
 
-        let mut game = Game { sequence, boards };
+        let game = Game { sequence, boards };
 
         assert_eq!(
-            winning_board(&mut game) as usize,
+            winning_board(game.clone()) as usize,
             (79..99).sum::<usize>() * 99
         );
-
-        game.reset();
-
-        assert_eq!(
-            losing_board(&mut game) as usize,
-            (79..99).sum::<usize>() * 99
-        );
+        assert_eq!(losing_board(game) as usize, (79..99).sum::<usize>() * 99);
     }
 }
