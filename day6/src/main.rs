@@ -30,38 +30,31 @@ impl Lanternfish {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Population {
-    generations: Vec<Vec<Lanternfish>>,
+    timer_counts: [usize; 9],
 }
 
 impl Population {
     pub fn new(starting_population: Vec<Lanternfish>) -> Self {
-        Self {
-            generations: vec![starting_population],
+        let mut timer_counts = [0; 9];
+
+        for fish in starting_population {
+            timer_counts[fish.timer as usize] += 1;
         }
+
+        Self { timer_counts }
     }
 
     pub fn simulate(&mut self, days: usize) {
-        for day in 0..days {
-            dbg!(day);
-            let mut new = vec![];
-
-            for generation in self.generations.iter_mut() {
-                for fish in generation.iter_mut() {
-                    if fish.timer == 0 {
-                        fish.timer = 6;
-                        new.push(Lanternfish::new(8));
-                    } else {
-                        fish.timer -= 1;
-                    }
-                }
-            }
-
-            self.generations.push(new);
+        for _ in 0..days {
+            self.timer_counts.rotate_left(1);
+            self.timer_counts[6] = self.timer_counts[6]
+                .checked_add(self.timer_counts[8])
+                .unwrap();
         }
     }
 
     pub fn count(&self) -> usize {
-        self.generations.iter().map(|gen| gen.len()).sum()
+        self.timer_counts.iter().sum()
     }
 }
 
@@ -120,6 +113,7 @@ mod tests {
         let mut population = parse(SAMPLE).unwrap();
 
         population.simulate(256);
+        dbg!(&population);
         assert_eq!(population.count(), 26984457539);
     }
 
@@ -132,7 +126,8 @@ mod tests {
         dbg!(&population);
         assert_eq!(population.count(), 353274);
 
-        population.simulate(256-80);
-        assert_eq!(population.count(), todo!());
+        population.simulate(256 - 80);
+        dbg!(&population);
+        assert_eq!(population.count(), 1609314870967);
     }
 }
