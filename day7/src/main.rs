@@ -17,18 +17,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn parse(input: &str) -> Result<Vec<u32>> {
+fn parse(input: &str) -> Result<Vec<i32>> {
     input
         .split(',')
         .map(|s| {
             s.trim()
-                .parse::<u32>()
+                .parse()
                 .wrap_err_with(|| format!("could not parse `{}` as position", s))
         })
         .collect()
 }
 
-fn align(crabs: &[u32], cost: impl Fn(u32, u32) -> u32) -> (u32, u32) {
+fn align(crabs: &[i32], cost: impl Fn(i32, i32) -> i32) -> (i32, i32) {
     if crabs.is_empty() {
         return (0, 0);
     } else if crabs.len() == 1 {
@@ -40,20 +40,20 @@ fn align(crabs: &[u32], cost: impl Fn(u32, u32) -> u32) -> (u32, u32) {
 
     (min..max)
         .map(|pick| {
-            let cost = crabs.iter().map(|&x| cost(x, pick)).sum::<u32>();
+            let cost = crabs.iter().map(|&x| cost(x, pick)).sum();
             (pick, cost)
         })
         .min_by_key(|(_, cost)| *cost)
         .unwrap()
 }
 
-fn align_linear(crabs: &[u32]) -> (u32, u32) {
-    align(crabs, |x, pick| (x as i32 - pick as i32).abs() as u32)
+fn align_linear(crabs: &[i32]) -> (i32, i32) {
+    align(crabs, |x, pick| (x - pick).abs())
 }
 
-fn align_v2(crabs: &[u32]) -> (u32, u32) {
+fn align_v2(crabs: &[i32]) -> (i32, i32) {
     align(crabs, |x, pick| {
-        let dist = (x as i32 - pick as i32).abs() as u32;
+        let dist = (x - pick).abs();
         // The cost is equal to the sum of the series `1..=dist`, which is equivalent to:
         ((1 + dist) * dist) / 2
     })
