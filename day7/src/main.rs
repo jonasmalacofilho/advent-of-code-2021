@@ -54,7 +54,8 @@ fn align_linear(crabs: &[u32]) -> (u32, u32) {
 fn align_v2(crabs: &[u32]) -> (u32, u32) {
     align(crabs, |x, pick| {
         let dist = (x as i32 - pick as i32).abs() as u32;
-        (1..=dist).sum::<u32>()
+        // The cost is equal to the sum of the series `1..=dist`, which is equivalent to:
+        ((1 + dist) * dist) / 2
     })
 }
 
@@ -91,6 +92,6 @@ mod tests {
         let crabs = parse(input).unwrap();
 
         assert_eq!(align_linear(&crabs), (336, 344735));
-        // assert_eq!(align_v2(&crabs), (474, 96798233));
+        assert_eq!(align_v2(&crabs), (474, 96798233));
     }
 }
