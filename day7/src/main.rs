@@ -35,16 +35,16 @@ fn align(crabs: &[i32], cost: impl Fn(i32, i32) -> i32) -> (i32, i32) {
         return (crabs[0], 0);
     }
 
-    let min = *crabs.iter().min().unwrap();
-    let max = *crabs.iter().max().unwrap();
+    let min = *crabs.iter().min().expect("empty slice");
+    let max = *crabs.iter().max().expect("empty slice");
 
-    (min..max)
+    (min..=max)
         .map(|pick| {
             let cost = crabs.iter().map(|&x| cost(x, pick)).sum();
             (pick, cost)
         })
         .min_by_key(|(_, cost)| *cost)
-        .unwrap()
+        .expect("empty range")
 }
 
 fn align_linear(crabs: &[i32]) -> (i32, i32) {
