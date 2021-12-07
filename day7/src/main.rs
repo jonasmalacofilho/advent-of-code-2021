@@ -7,12 +7,16 @@ fn main() -> Result<()> {
     let crabs = parse(input)?;
 
     let alignment = align_linear(&crabs);
-    dbg!(&alignment);
-    println!("Required fuel for alignment: {}", alignment.1);
+    println!(
+        "With linear consumption, >>> {} fuel <<< is required to align at {}",
+        alignment.1, alignment.0
+    );
 
-    let alignment_v2 = align_v2(&crabs);
-    dbg!(&alignment_v2);
-    println!("Required fuel for alignment, fixed/v2: {}", alignment_v2.1);
+    let alignment_quad = align_quadratic(&crabs);
+    println!(
+        "With quadratic consumption, >>> {} fuel <<< is required to align at {}",
+        alignment_quad.1, alignment_quad.0
+    );
 
     Ok(())
 }
@@ -51,7 +55,7 @@ fn align_linear(crabs: &[i32]) -> (i32, i32) {
     align(crabs, |x, pick| (x - pick).abs())
 }
 
-fn align_v2(crabs: &[i32]) -> (i32, i32) {
+fn align_quadratic(crabs: &[i32]) -> (i32, i32) {
     align(crabs, |x, pick| {
         let dist = (x - pick).abs();
         // The cost is equal to the sum of the series `1..=dist`, which is equivalent to:
@@ -83,7 +87,7 @@ mod tests {
     fn gets_alignment_and_fuel_cost_correct_for_real() {
         let crabs = parse(SAMPLE).unwrap();
 
-        assert_eq!(align_v2(&crabs), (5, 168));
+        assert_eq!(align_quadratic(&crabs), (5, 168));
     }
 
     #[test]
@@ -92,6 +96,6 @@ mod tests {
         let crabs = parse(input).unwrap();
 
         assert_eq!(align_linear(&crabs), (336, 344735));
-        assert_eq!(align_v2(&crabs), (474, 96798233));
+        assert_eq!(align_quadratic(&crabs), (474, 96798233));
     }
 }
