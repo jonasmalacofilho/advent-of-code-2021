@@ -16,31 +16,33 @@ fn main() {
         egadfb cdbfeg cegd fecab cgb gbdefca cg fgcdab egfdb bfceg | gbdfcae bgc cg cgb
         gcafb gcf dcaebfg ecagb gf abcdeg gaef cafbge fdbac fegbdc | fgae cfgab fg bagce
     "};
-    let input = include_str!("../input.txt");
-
+    // let input = include_str!("../input.txt");
 
     let entries = parse(input);
     dbg!(&entries);
 
     let part1: usize = entries
         .iter()
-        .map(|entry| {
-            entry
+        .map(|(patterns, outputs)| {
+            outputs
                 .iter()
-                .filter(|value| [2, 4, 3, 7].contains(value))
+                .filter(|value| [2, 4, 3, 7].contains(&value.len()))
                 .count()
         })
         .sum();
     dbg!(part1);
 }
 
-type Entry = Vec<usize>;
+type Entry<'a> = (Vec<&'a str>, Vec<&'a str>);
 
 fn parse(s: &str) -> Vec<Entry> {
     s.lines()
         .map(|line| {
-            let (_, output) = line.split_once('|').unwrap();
-            output.split_whitespace().map(|value| value.len()).collect()
+            let (patterns, outputs) = line.split_once('|').unwrap();
+            (
+                patterns.split_whitespace().collect(),
+                outputs.split_whitespace().collect(),
+            )
         })
         .collect()
 }
