@@ -1,115 +1,54 @@
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{collections::BTreeMap, fmt::Debug, str::FromStr};
 
-use indoc::indoc;
+use eyre::{ensure, eyre, Report, Result};
 
-fn main() {
-    println!("Hello, world!");
+const INPUT: &str = include_str!("../input.txt");
 
-    // let input = "acedgfb cdfbe gcdfa fbcad dab cefabd cdfgeb eafb cagedb ab | cdfeb fcadb cdfeb cdbaf";
-    let input = indoc! {"
-        be cfbegad cbdgef fgaecd cgeb fdcge agebfd fecdb fabcd edb | fdgacbe cefdb cefbgd gcbe
-        edbfga begcd cbg gc gcadebf fbgde acbgfd abcde gfcbed gfec | fcgedb cgb dgebacf gc
-        fgaebd cg bdaec gdafb agbcfd gdcbef bgcad gfac gcb cdgabef | cg cg fdcagb cbg
-        fbegcd cbd adcefb dageb afcb bc aefdc ecdab fgdeca fcdbega | efabcd cedba gadfec cb
-        aecbfdg fbg gf bafeg dbefa fcge gcbea fcaegb dgceab fcbdga | gecf egdcabf bgf bfgea
-        fgeab ca afcebg bdacfeg cfaedg gcfdb baec bfadeg bafgc acf | gebdcfa ecba ca fadegcb
-        dbcfg fgd bdegcaf fgec aegbdf ecdfab fbedc dacgb gdcebf gf | cefg dcbef fcge gbcadfe
-        bdfegc cbegaf gecbf dfcage bdacg ed bedf ced adcbefg gebcd | ed bcgafe cdgba cbgef
-        egadfb cdbfeg cegd fecab cgb gbdefca cg fgcdab egfdb bfceg | gbdfcae bgc cg cgb
-        gcafb gcf dcaebfg ecagb gf abcdeg gaef cafbge fdbac fegbdc | fgae cfgab fg bagce
-    "};
-    let input = include_str!("../input.txt");
+fn main() -> Result<()> {
+    println!("--- Day 8: Seven Segment Search ---");
 
-    let entries = parse(input);
-    // dbg!(&entries);
+    let entries = parse(INPUT)?;
+    println!("Easy digits: {}", count_easy_digits(&entries));
+    println!("Output sum: {}", sum_values(&entries)?);
 
-    let part1: usize = entries
-        .iter()
-        .map(|(_, outputs)| {
-            outputs
-                .iter()
-                .filter(|pat| [2, 4, 3, 7].contains(&pat.active_count()))
-                .count()
-        })
-        .sum();
-    dbg!(part1);
-
-    let part2: i32 = entries
-        .iter()
-        .map(|(patterns, outputs)| {
-            let one = *patterns.iter().find(|pat| pat.active_count() == 2).unwrap();
-            let four = *patterns.iter().find(|pat| pat.active_count() == 4).unwrap();
-
-            let mut decoder = BTreeMap::new();
-            decoder.insert(one, 1);
-            decoder.insert(four, 4);
-
-            for pat in patterns {
-                decoder.insert(
-                    *pat,
-                    match (pat.active_count(), pat.union(one).active_count(), pat.union(four).active_count()) {
-                        (2|4, _, _) => continue,
-                        (3, _, _) => 7,
-                        (5, 5, _) => 3,
-                        (5, 6, 6) => 5,
-                        (5, 6, 7) => 2,
-                        (6, 6, 6) => 9,
-                        (6, 6, 7) => 0,
-                        (6, 7, _) => 6,
-                        (7, _, _) => 8,
-                        _ => unreachable!()
-                    },
-                );
-            }
-
-            dbg!(decoder.len());
-            dbg!(&decoder);
-
-            let mut value: i32 = 0;
-
-            for digit in outputs
-                .iter()
-                .inspect(|x| println!("{:?}", x))
-                .map(|pat| decoder[pat])
-            {
-                value *= 10;
-                value += digit;
-            }
-
-            value
-        })
-        .inspect(|x| println!("{}", x))
-        .sum();
-    dbg!(part2);
+    Ok(())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Pattern(u8);
 
 impl Pattern {
-    fn new(s: &str) -> Pattern {
+    fn new(inner: u8) -> Pattern {
+        Pattern(inner)
+    }
+
+    fn count(&self) -> u32 {
+        self.0.count_ones()
+    }
+
+    fn union(&self, other: Pattern) -> Pattern {
+        Pattern::new(self.0 | other.0)
+    }
+}
+
+impl FromStr for Pattern {
+    type Err = Report;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut numeric = 0;
 
         for c in s.bytes() {
-            assert!((b'a'..=b'g').contains(&c));
+            ensure!(
+                (b'a'..=b'g').contains(&c),
+                "unknown segment: {}",
+                char::from(c)
+            );
 
             let bit = c - b'a';
             numeric |= 1 << bit;
         }
 
-        Pattern(numeric)
-    }
-
-    fn active_count(&self) -> u8 {
-        self.0.count_ones() as _
-    }
-
-    fn union(&self, other: Pattern) -> Pattern {
-        Pattern(self.0 | other.0)
-    }
-
-    fn intersection(&self, other: Pattern) -> Pattern {
-        Pattern(self.0 & other.0)
+        Ok(Pattern::new(numeric))
     }
 }
 
@@ -121,14 +60,126 @@ impl Debug for Pattern {
 
 type Entry = (Vec<Pattern>, Vec<Pattern>);
 
-fn parse(s: &str) -> Vec<Entry> {
+fn parse(s: &str) -> Result<Vec<Entry>> {
     s.lines()
         .map(|line| {
-            let (patterns, outputs) = line.split_once('|').unwrap();
-            (
-                patterns.split_whitespace().map(Pattern::new).collect(),
-                outputs.split_whitespace().map(Pattern::new).collect(),
-            )
+            let (patterns, outputs) = line
+                .split_once('|')
+                .ok_or_else(|| eyre!("missing | separator between patterns and outputs"))?;
+
+            let patterns: Result<_> = patterns.split_whitespace().map(Pattern::from_str).collect();
+            let outputs: Result<_> = outputs.split_whitespace().map(Pattern::from_str).collect();
+
+            Ok((patterns?, outputs?))
         })
         .collect()
+}
+
+fn count_easy_digits(entries: &[Entry]) -> usize {
+    entries
+        .iter()
+        .map(|(_, outputs)| {
+            outputs
+                .iter()
+                .filter(|pat| [2, 4, 3, 7].contains(&pat.count()))
+                .count()
+        })
+        .sum()
+}
+
+fn sum_values(entries: &[Entry]) -> Result<i32> {
+    entries
+        .iter()
+        .map(|(patterns, outputs)| {
+            let decoder = decode(patterns)?;
+
+            let mut value: i32 = 0;
+
+            for pat in outputs.iter() {
+                let digit: i32 = decoder[pat].into();
+
+                value *= 10;
+                value += digit;
+            }
+
+            Ok(value)
+        })
+        .sum()
+}
+
+fn decode(patterns: &[Pattern]) -> Result<BTreeMap<Pattern, u8>> {
+    let one = *patterns
+        .iter()
+        .find(|pat| pat.count() == 2)
+        .ok_or_else(|| eyre!("missing 2-segment pattern for one"))?;
+    let four = *patterns
+        .iter()
+        .find(|pat| pat.count() == 4)
+        .ok_or_else(|| eyre!("missing 4-segment pattern for four"))?;
+
+    let mut decoder = BTreeMap::new();
+
+    // Don't mind the specific segments, use the already known one and four patterns and
+    // match how many segments are on in each case: digit, digit ∪ one, digit ∪ four
+    for pat in patterns {
+        let digit = match (pat.count(), pat.union(one).count(), pat.union(four).count()) {
+            (2, _, _) => 1,
+            (3, _, _) => 7,
+            (4, _, _) => 4,
+            (5, 5, _) => 3,
+            (5, 6, 6) => 5,
+            (5, 6, 7) => 2,
+            (6, 6, 6) => 9,
+            (6, 6, 7) => 0,
+            (6, 7, _) => 6,
+            (7, _, _) => 8,
+            _ => unreachable!(),
+        };
+
+        decoder.insert(*pat, digit);
+    }
+
+    ensure!(decoder.len() == 10, "not enough patterns");
+    Ok(decoder)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indoc::indoc;
+
+    const SAMPLE: &str = indoc! {"
+        be cfbegad cbdgef fgaecd cgeb fdcge agebfd fecdb fabcd edb | fdgacbe cefdb cefbgd gcbe
+        edbfga begcd cbg gc gcadebf fbgde acbgfd abcde gfcbed gfec | fcgedb cgb dgebacf gc
+        fgaebd cg bdaec gdafb agbcfd gdcbef bgcad gfac gcb cdgabef | cg cg fdcagb cbg
+        fbegcd cbd adcefb dageb afcb bc aefdc ecdab fgdeca fcdbega | efabcd cedba gadfec cb
+        aecbfdg fbg gf bafeg dbefa fcge gcbea fcaegb dgceab fcbdga | gecf egdcabf bgf bfgea
+        fgeab ca afcebg bdacfeg cfaedg gcfdb baec bfadeg bafgc acf | gebdcfa ecba ca fadegcb
+        dbcfg fgd bdegcaf fgec aegbdf ecdfab fbedc dacgb gdcebf gf | cefg dcbef fcge gbcadfe
+        bdfegc cbegaf gecbf dfcage bdacg ed bedf ced adcbefg gebcd | ed bcgafe cdgba cbgef
+        egadfb cdbfeg cegd fecab cgb gbdefca cg fgcdab egfdb bfceg | gbdfcae bgc cg cgb
+        gcafb gcf dcaebfg ecagb gf abcdeg gaef cafbge fdbac fegbdc | fgae cfgab fg bagce
+    "};
+
+    #[test]
+    fn finds_the_easy_digits() {
+        let entries = parse(SAMPLE).unwrap();
+
+        assert_eq!(count_easy_digits(&entries), 26);
+    }
+
+    #[test]
+    fn decodes_all_digits() {
+        let entries = parse(SAMPLE).unwrap();
+
+        assert_eq!(sum_values(&entries).unwrap(), 61229);
+    }
+
+    #[test]
+    fn does_not_regress() {
+        let entries = parse(INPUT).unwrap();
+
+        assert_eq!(count_easy_digits(&entries), 530);
+        assert_eq!(sum_values(&entries).unwrap(), 1051087);
+    }
 }
