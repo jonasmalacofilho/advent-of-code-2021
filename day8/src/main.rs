@@ -119,8 +119,12 @@ fn decode(patterns: &[Pattern]) -> Result<BTreeMap<Pattern, u8>> {
 
     let mut decoder = BTreeMap::new();
 
-    // Don't mind the specific segments, use the already known one and four patterns and
-    // match how many segments are on in each case: digit, digit ∪ one, digit ∪ four
+    // Don't mind the specific segments, use the already known one and four patterns and match how
+    // many segments are on in each case: digit, digit ∪ one, digit ∪ four
+    //
+    // Unions (∪) are used for no special reason other than the name "union" being short;
+    // intersections (∩) or symmetric differences (⊖) would work just as well, provided that the
+    // match arms are adjusted accordingly
     for pat in patterns {
         let digit = match (pat.count(), pat.union(one).count(), pat.union(four).count()) {
             (2, _, _) => 1,
