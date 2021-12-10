@@ -1,143 +1,206 @@
-use std::collections::BinaryHeap;
+use std::{collections::BinaryHeap, str::FromStr};
 
-use eyre::{eyre, Report, Result, WrapErr};
+use eyre::{ensure, Report, Result};
 
 const INPUT: &str = include_str!("../input.txt");
 
-fn main() {
-    println!("--- Day 9: ---");
+fn main() -> Result<()> {
+    println!("--- Day 9: Smoke Basin ---");
 
-    let map = parse(INPUT);
+    let map = INPUT.parse::<HeightMap>()?.find_basins();
 
-    dbg!(risk(&map));
-    dbg!(basins(&map));
+    println!("Risk from low points: {}", total_risk(&map));
+    println!("Product of largest basins: {}", basins_product(&map));
+
+    Ok(())
 }
 
-fn parse(s: &str) -> Vec<Vec<u8>> {
-    s.lines()
-        .map(|line| line.bytes().map(|b| b - b'0').collect())
-        .collect()
+#[derive(Debug)]
+struct LazyBasins;
+
+#[derive(Debug)]
+struct WithBasins(Vec<usize>);
+
+#[derive(Debug)]
+struct HeightMap<Basins = LazyBasins> {
+    width: usize,
+    heights: Vec<u8>,
+    basins: Basins,
 }
 
-fn risk(map: &[Vec<u8>]) -> usize {
-    let mut acc = 0;
+impl HeightMap<LazyBasins> {
+    fn new(heights: Vec<u8>, width: usize) -> HeightMap<LazyBasins> {
+        assert_eq!(heights.len() % width, 0);
+        HeightMap {
+            width,
+            heights,
+            basins: LazyBasins,
+        }
+    }
 
-    for i in 0..map.len() {
-        for j in 0..map[i].len() {
-            let h = map[i][j];
-            let t = if i > 0 { map[i - 1][j] } else { u8::MAX };
-            let r = if j < map[i].len() - 1 {
-                map[i][j + 1]
+    fn find_basins(self) -> HeightMap<WithBasins> {
+        let mut basins = vec![];
+
+        // Find the low points and start the basins at them
+        for i in 0..self.heights.len() {
+            if self.heights[i] == 9 {
+                basins.push(i);
+                continue;
+            }
+
+            let mut low_point = i;
+
+            // top
+            if i >= self.width {
+                let top = i - self.width;
+                if self.heights[top] < self.heights[low_point] {
+                    low_point = top;
+                }
+            }
+
+            // bottom
+            if i + self.width < self.heights.len() {
+                let bottom = i + self.width;
+                if self.heights[bottom] < self.heights[low_point] {
+                    low_point = bottom;
+                }
+            }
+
+            // left
+            if i % self.width > 0 {
+                let left = i - 1;
+                if self.heights[left] < self.heights[low_point] {
+                    low_point = left;
+                }
+            }
+
+            // right
+            if i % self.width + 1 < self.width {
+                let right = i + 1;
+                if self.heights[right] < self.heights[low_point] {
+                    low_point = right;
+                }
+            }
+
+            basins.push(low_point);
+        }
+
+        debug_assert!(basins.len() == self.heights.len());
+
+        let mut done = false;
+
+        // Propagate the basins to the remaining points
+        while !done {
+            done = true;
+            for i in 0..basins.len() {
+                if basins[i] != basins[basins[i]] {
+                    basins[i] = basins[basins[i]];
+                    done = false;
+                }
+            }
+        }
+
+        HeightMap {
+            width: self.width,
+            heights: self.heights,
+            basins: WithBasins(basins),
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl<Basins> HeightMap<Basins> {
+    fn id(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
+    }
+
+    fn map_width(&self) -> usize {
+        self.width
+    }
+
+    fn map_height(&self) -> usize {
+        self.heights.len() / self.width
+    }
+
+    fn height(&self, x: usize, y: usize) -> Option<u8> {
+        if x >= self.map_width() || y >= self.map_height() {
+            return None;
+        }
+        Some(self.heights[self.id(x, y)])
+    }
+}
+
+#[derive(Debug)]
+struct LowPoint {
+    pub height: u8,
+    pub basin_size: usize,
+}
+
+impl HeightMap<WithBasins> {
+    fn low_points(&self) -> impl Iterator<Item = LowPoint> + '_ {
+        let heights = &self.heights;
+        let basins = &self.basins.0;
+
+        (0..)
+            .zip(heights.iter().zip(basins.iter()))
+            .filter_map(|(id, (&height, &basin))| {
+                if id != basin || height == 9 {
+                    return None;
+                }
+
+                let basin_size = basins.iter().filter(|&&b| b == basin).count();
+
+                Some(LowPoint { height, basin_size })
+            })
+    }
+}
+
+impl FromStr for HeightMap<LazyBasins> {
+    type Err = Report;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut heights = vec![];
+        let mut width = None;
+
+        for line in s.lines() {
+            if let Some(width) = width {
+                ensure!(
+                    line.len() == width,
+                    "irregular map: expected width {}, got {}",
+                    width,
+                    line.len()
+                );
             } else {
-                u8::MAX
-            };
-            let b = if i < map.len() - 1 {
-                map[i + 1][j]
-            } else {
-                u8::MAX
-            };
-            let l = if j > 0 { map[i][j - 1] } else { u8::MAX };
+                width = Some(line.len());
+            }
 
-            if h < t && h < r && h < b && h < l {
-                acc += h as usize + 1;
+            for b in line.bytes() {
+                ensure!(
+                    (b'0'..=b'9').contains(&b),
+                    "invalid height {}",
+                    char::from(b)
+                );
+                heights.push(b - b'0');
             }
         }
-    }
 
-    acc
+        Ok(HeightMap::new(heights, width.unwrap_or(0)))
+    }
 }
 
-fn basins(map: &[Vec<u8>]) -> usize {
-    // FIXME assumes that map is rectangular
-    let mut basins: Vec<Vec<(usize, usize)>> = vec![vec![(0, 0); map[0].len()]; map.len()];
-    let mut done = false;
+fn total_risk(map: &HeightMap<WithBasins>) -> usize {
+    map.low_points()
+        .map(|LowPoint { height, .. }| height as usize + 1)
+        .sum()
+}
 
-    for i in 0..map.len() {
-        for j in 0..map[i].len() {
-            basins[i][j] = (i, j);
-        }
-    }
+fn basins_product(map: &HeightMap<WithBasins>) -> usize {
+    let mut sizes: BinaryHeap<_> = map
+        .low_points()
+        .map(|LowPoint { basin_size, .. }| basin_size)
+        .collect();
 
-    while !done {
-        done = true;
-
-        for i in 0..map.len() {
-            for j in 0..map[i].len() {
-                if map[i][j] == 9 {
-                    continue;
-                }
-
-                let (mut mi, mut mj) = basins[i][j];
-                let mut mh = map[mi][mj];
-
-                let t = if i > 0 { map[i - 1][j] } else { u8::MAX };
-                let r = if j < map[i].len() - 1 {
-                    map[i][j + 1]
-                } else {
-                    u8::MAX
-                };
-                let b = if i < map.len() - 1 {
-                    map[i + 1][j]
-                } else {
-                    u8::MAX
-                };
-                let l = if j > 0 { map[i][j - 1] } else { u8::MAX };
-
-                if t != 9 && t < mh {
-                    mh = t;
-                    mi = i - 1;
-                    mj = j;
-                    done = false;
-                }
-
-                if r != 9 && r < mh {
-                    mh = r;
-                    mi = i;
-                    mj = j + 1;
-                    done = false;
-                }
-
-                if b != 9 && b < mh {
-                    mh = b;
-                    mi = i + 1;
-                    mj = j;
-                    done = false;
-                }
-
-                if l != 9 && l < mh {
-                    mh = l;
-                    mi = i;
-                    mj = j - 1;
-                    done = false;
-                }
-
-                if basins[mi][mj] != (mi, mj) {
-                    done = false;
-                }
-
-                basins[i][j] = basins[mi][mj];
-            }
-        }
-    }
-
-    let mut basin_sizes = BinaryHeap::new();
-
-    for i in 0..map.len() {
-        for j in 0..map[i].len() {
-            if map[i][j] != 9 && basins[i][j] == (i, j) {
-                // Is low point, now measure the basin
-
-                let basin_size: usize = basins
-                    .iter()
-                    .map(|r| r.iter().filter(|&&c| c == (i, j)).count())
-                    .sum();
-
-                basin_sizes.push(basin_size);
-            }
-        }
-    }
-
-    basin_sizes.iter().take(3).product()
+    (0..3).map(|_| sizes.pop().unwrap_or(1)).product()
 }
 
 #[cfg(test)]
@@ -155,23 +218,23 @@ mod tests {
 
     #[test]
     fn part1() {
-        let map = parse(SAMPLE);
+        let map = SAMPLE.parse::<HeightMap>().unwrap().find_basins();
 
-        assert_eq!(risk(&map), 15);
+        assert_eq!(total_risk(&map), 15);
     }
 
     #[test]
     fn part2() {
-        let map = parse(SAMPLE);
+        let map = SAMPLE.parse::<HeightMap>().unwrap().find_basins();
 
-        assert_eq!(basins(&map), 1134);
+        assert_eq!(basins_product(&map), 1134);
     }
 
     #[test]
     fn does_not_regres() {
-        let map = parse(INPUT);
+        let map = INPUT.parse::<HeightMap>().unwrap().find_basins();
 
-        assert_eq!(risk(&map), 489);
-        assert_eq!(basins(&map), 1056330);
+        assert_eq!(total_risk(&map), 489);
+        assert_eq!(basins_product(&map), 1056330);
     }
 }
