@@ -37,7 +37,7 @@ fn close(c: u8) -> u8 {
         b'[' => b']',
         b'{' => b'}',
         b'<' => b'>',
-        _ => unreachable!(),
+        _ => panic!("unsupported character: {}", char::from(c)),
     }
 }
 
