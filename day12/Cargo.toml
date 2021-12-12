@@ -1,0 +1,11 @@
+[package]
+name = "day12"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+indoc = "1.0.3"
+petgraph = "0.6.0"
+smol_str = "0.1.21"
