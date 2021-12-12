@@ -60,9 +60,9 @@ type CaveGraph = UnGraph<(CaveSize, SmolStr), ()>;
 
 #[derive(Debug)]
 struct CaveNetwork {
-    graph: CaveGraph,
-    start: NodeIndex,
-    end: NodeIndex,
+    pub graph: CaveGraph,
+    pub start: NodeIndex,
+    pub end: NodeIndex,
 }
 
 fn parse(s: &str) -> CaveNetwork {
@@ -97,8 +97,8 @@ enum Mode {
 
 fn count_paths(network: &CaveNetwork, mode: Mode) -> usize {
     // Paths are found using a depth-first search.  A recursive implementation is simpler to reason
-    // about (due to having less noise caused by a manually managed stack) and all graphs to be
-    // analyzed are rather small
+    // about (due to having no noise from a manually managed stack) and all graphs to be analyzed
+    // are rather small, so the stack overflows are not expected
 
     let mut paths = vec![]; // wasteful, but useful for debugging
 
@@ -115,16 +115,13 @@ fn count_paths(network: &CaveNetwork, mode: Mode) -> usize {
         if graph[cur].0 == CaveSize::Small && visited.contains(&cur) {
             // Small caves can only appear a limited number of times; this is also what prevents
             // infinite loops, since otherwise the graph would have unbounded cycles
-            match mode {
-                Mode::SmallTwiceOnce if graph[cur].1 != "start" => {
-                    // Allow this cave appear twice in the path, but not later ones
-                    mode = Mode::SmallOnce;
-                }
-                _ => {
-                    // This path is invalid, discard it
-                    return;
-                }
-            };
+            if mode == Mode::SmallTwiceOnce && graph[cur].1 != "start" {
+                // Allow this cave appear twice in the path, but not later ones
+                mode = Mode::SmallOnce;
+            } else {
+                // This path is invalid, discard it
+                return;
+            }
         }
 
         visited.push(cur);
