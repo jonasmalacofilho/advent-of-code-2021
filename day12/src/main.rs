@@ -33,7 +33,8 @@ fn main() {
     println!("--- Day 12: Passage Pathing ---");
 
     let network = parse(INPUT);
-    dbg!(count_paths(&network));
+    dbg!(count_paths(&network, Mode::SmallOnce));
+    dbg!(count_paths(&network, Mode::SmallTwiceOnce));
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -88,44 +89,63 @@ fn parse(s: &str) -> CaveNetwork {
     }
 }
 
-fn count_paths(network: &CaveNetwork) -> usize {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    SmallOnce,
+    SmallTwiceOnce,
+}
+
+fn count_paths(network: &CaveNetwork, mode: Mode) -> usize {
     // Paths are found using a depth-first search.  A recursive implementation is simpler to reason
     // about (due to having less noise caused by a manually managed stack) and all graphs to be
     // analyzed are rather small
 
     let mut paths = vec![]; // wasteful, but useful for debugging
 
+    assert_eq!(network.graph[network.start].1, "start");
+    assert_eq!(network.graph[network.end].1, "end");
+
     fn visit(
         graph: &CaveGraph,
         cur: NodeIndex,
-        end: NodeIndex,
+        mut mode: Mode,
         mut visited: Vec<NodeIndex>,
         paths: &mut Vec<Vec<NodeIndex>>,
     ) {
-        if cur == end {
+        if graph[cur].0 == CaveSize::Small && visited.contains(&cur) {
+            // Small caves can only appear a limited number of times; this is also what prevents
+            // infinite loops, since otherwise the graph would have unbounded cycles
+            match mode {
+                Mode::SmallTwiceOnce if graph[cur].1 != "start" => {
+                    // Allow this cave appear twice in the path, but not later ones
+                    mode = Mode::SmallOnce;
+                }
+                _ => {
+                    // This path is invalid, discard it
+                    return;
+                }
+            };
+        }
+
+        visited.push(cur);
+
+        if graph[cur].1 == "end" {
             // Found a new path to "end"
             paths.push(visited);
             return;
-        } else if graph[cur].0 == CaveSize::Small && visited.contains(&cur) {
-            // Small caves can only appear once; this is also responsible for preventing infinitive
-            // loops, otherwise the graph would have unbounded cycles
-            return;
-        } else {
-            visited.push(cur);
         }
 
         for neighbor in graph.neighbors(cur) {
-            visit(graph, neighbor, end, visited.clone(), paths);
+            visit(graph, neighbor, mode, visited.clone(), paths);
         }
     }
 
-    visit(
-        &network.graph,
-        network.start,
-        network.end,
-        vec![],
-        &mut paths,
-    );
+    visit(&network.graph, network.start, mode, vec![], &mut paths);
+
+    // fn fmt_path(graph: &CaveGraph, path: &[NodeIndex]) -> String {
+    //     itertools::Itertools::intersperse(path.iter().map(|&n| graph[n].1.as_str()), "-").collect()
+    // }
+    // dbg!(paths.iter().map(|p| fmt_path(&network.graph, p)).collect::<Vec<_>>());
 
     paths.len()
 }
@@ -181,24 +201,28 @@ mod tests {
     #[test]
     fn paths_in_tiny_example() {
         let network = parse(TINY_SAMPLE);
-        assert_eq!(count_paths(&network), 10);
+        assert_eq!(count_paths(&network, Mode::SmallOnce), 10);
+        assert_eq!(count_paths(&network, Mode::SmallTwiceOnce), 36);
     }
 
     #[test]
     fn paths_in_larger_example() {
         let network = parse(LARGER_SAMPLE);
-        assert_eq!(count_paths(&network), 19);
+        assert_eq!(count_paths(&network, Mode::SmallOnce), 19);
+        assert_eq!(count_paths(&network, Mode::SmallTwiceOnce), 103);
     }
 
     #[test]
     fn paths_in_largest_example() {
         let network = parse(LARGEST_SAMPLE);
-        assert_eq!(count_paths(&network), 226);
+        assert_eq!(count_paths(&network, Mode::SmallOnce), 226);
+        assert_eq!(count_paths(&network, Mode::SmallTwiceOnce), 3509);
     }
 
     #[test]
     fn does_not_regress() {
         let network = parse(INPUT);
-        assert_eq!(count_paths(&network), 3495);
+        assert_eq!(count_paths(&network, Mode::SmallOnce), 3495);
+        assert_eq!(count_paths(&network, Mode::SmallTwiceOnce), 94849);
     }
 }

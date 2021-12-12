@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 indoc = "1.0.3"
+itertools = "0.10.3"
 petgraph = "0.6.0"
 smol_str = "0.1.21"
