@@ -1,4 +1,4 @@
-use ndarray::{s, Array2, Axis, Dimension};
+use ndarray::{s, Array2, Dimension};
 
 const INPUT: &str = include_str!("../input.txt");
 
@@ -78,31 +78,24 @@ fn parse(s: &str) -> (Paper, Vec<Fold>) {
 }
 
 fn fold<'a>(paper: &Paper, folds: impl Iterator<Item = &'a Fold>) -> Paper {
-    let mut paper = paper.clone(); // FIXME avoid unnecessary allocation and copy
+    let mut paper = paper.clone();
 
     for fold in folds {
-        let (a, b) = match fold {
-            Fold::Left(x) => (
-                paper.slice(s![0.., ..*x]),
-                paper.slice(s![0.., *x + 1..;-1]),
-            ),
-            Fold::Up(y) => (
-                paper.slice(s![..*y, 0..]),
-                paper.slice(s![*y + 1..;-1, 0..]),
-            ),
+        let (mut a, b) = match fold {
+            Fold::Left(x) => paper.multi_slice_mut((s![0.., ..*x], s![0.., *x + 1..;-1])),
+            Fold::Up(y) => paper.multi_slice_mut((s![..*y, 0..], s![*y + 1..;-1, 0..])),
         };
 
-        let mut fold_result = a.to_owned();
-
         // The result shape determinated by `a` may be larger than the folded part `b`; when
-        // that happens, compute how of `a` is not going to be covered by `b`...
+        // that happens, compute how much of `a` is not going to be covered by `b`...
         let uncovered = (a.raw_dim() - b.raw_dim()).into_pattern();
 
         // ...and only do the dot union on the part that overlaps
-        let mut overlap = fold_result.slice_mut(s![uncovered.0.., uncovered.1..]);
-
+        let mut overlap = a.slice_mut(s![uncovered.0.., uncovered.1..]);
         overlap |= &b;
-        paper = fold_result;
+
+        let new_shape = a.dim();
+        paper.slice_collapse(s![..new_shape.0, ..new_shape.1]);
     }
 
     paper
