@@ -1,4 +1,4 @@
-use ndarray::{s, Array2};
+use ndarray::{s, Array2, Axis, Dimension};
 
 const INPUT: &str = include_str!("../input.txt");
 
@@ -48,12 +48,6 @@ fn parse(s: &str) -> (Paper, Vec<Fold>) {
         }
     }
 
-    if max_y == 889 {
-        // HACK patch the initial paper width of INPUT
-        // FIXME remove hack
-        max_y = 894;
-    }
-
     let mut paper = Array2::zeros((max_y + 1, max_x + 1));
 
     for (x, y) in dots {
@@ -94,7 +88,24 @@ fn fold<'a>(paper: &Paper, folds: impl Iterator<Item = &'a Fold>) -> Paper {
             ),
         };
 
-        paper = &a | &b;
+        if a.raw_dim() != b.raw_dim() {
+            // The folded part is smaller than the unfolded one; the uncovered part of the
+            // resulting paper is to the left/top of the fold, so extend/offset `b` accordingly
+
+            let (axis, shape) = match (a.raw_dim() - b.raw_dim()).into_pattern() {
+                (rows, 0) => (Axis(0), (rows, b.shape()[1])),
+                (0, cols) => (Axis(1), (b.shape()[0], cols)),
+                _ => unreachable!(),
+            };
+
+            // FIXME try to avoid the extra allocation and copy
+            let mut ex = Array2::zeros(shape);
+            ex.append(axis, b).unwrap();
+            paper = &a | &ex;
+        } else {
+            // Perfect folder through a midpoint, nothing to worry about
+            paper = &a | &b;
+        }
     }
 
     paper
