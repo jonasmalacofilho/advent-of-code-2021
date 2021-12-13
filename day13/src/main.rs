@@ -92,24 +92,17 @@ fn fold<'a>(paper: &Paper, folds: impl Iterator<Item = &'a Fold>) -> Paper {
             ),
         };
 
-        if a.raw_dim() != b.raw_dim() {
-            // The folded part is smaller than the unfolded one; the uncovered part of the
-            // resulting paper is to the left/top of the fold, so extend/offset `b` accordingly
+        let mut fold_result = a.to_owned();
 
-            let (axis, shape) = match (a.raw_dim() - b.raw_dim()).into_pattern() {
-                (rows, 0) => (Axis(0), (rows, b.shape()[1])),
-                (0, cols) => (Axis(1), (b.shape()[0], cols)),
-                _ => unreachable!(),
-            };
+        // The result shape determinated by `a` may be larger than the folded part `b`; when
+        // that happens, compute how of `a` is not going to be covered by `b`...
+        let uncovered = (a.raw_dim() - b.raw_dim()).into_pattern();
 
-            // FIXME try to avoid the extra allocation and copy
-            let mut ex = Array2::zeros(shape);
-            ex.append(axis, b).unwrap();
-            paper = &a | &ex;
-        } else {
-            // Perfect folder through a midpoint, nothing to worry about
-            paper = &a | &b;
-        }
+        // ...and only do the dot union on the part that overlaps
+        let mut overlap = fold_result.slice_mut(s![uncovered.0.., uncovered.1..]);
+
+        overlap |= &b;
+        paper = fold_result;
     }
 
     paper
@@ -158,6 +151,6 @@ mod tests {
     fn does_not_regress() {
         let (paper, folds) = parse(INPUT);
         assert_eq!(dots_after_folds(&paper, folds.iter().take(1)), 669);
-        // TODO assert the final code
+        // TODO assert the final code (UEFZCUCJ)
     }
 }
