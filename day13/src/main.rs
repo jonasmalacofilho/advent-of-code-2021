@@ -35,8 +35,9 @@ fn parse(s: &str) -> (Paper, Vec<Fold>) {
             break;
         }
 
-        let (x, y) = line.split_once(',').unwrap();
-        let (x, y): (usize, usize) = (x.parse().unwrap(), y.parse().unwrap());
+        let (x, y) = line.split_once(',').expect("missing comma (`,`)");
+        let x: usize = x.parse().expect("invalid x coordinate");
+        let y: usize = y.parse().expect("invalid y coordinate");
 
         dots.push((x, y));
 
@@ -57,9 +58,12 @@ fn parse(s: &str) -> (Paper, Vec<Fold>) {
     let mut folds = vec![];
 
     for line in lines {
-        let fold = line.strip_prefix("fold along ").unwrap();
-        let (axis, value) = fold.split_once('=').unwrap();
-        let value: usize = value.parse().unwrap();
+        let fold = line
+            .strip_prefix("fold along ")
+            .expect(r"missing `fold along ` prefix");
+
+        let (axis, value) = fold.split_once('=').expect("missing equal sign (`=`)");
+        let value: usize = value.parse().expect("invalid fold coordinate");
 
         let fold = match axis {
             "x" => Fold::Left(value),
