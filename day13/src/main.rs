@@ -10,7 +10,7 @@ fn main() {
     dbg!(dots_after_folds(&paper, folds.iter().take(1)));
 
     let final_paper = fold(&paper, folds.iter());
-    let code = final_paper.map(|x| if *x != 0 { 'X' } else { ' ' });
+    let code = final_paper.map(|x| if *x != 0 { '█' } else { ' ' });
 
     println!("{}", code); // reads: UEFZCUCJ
 }
