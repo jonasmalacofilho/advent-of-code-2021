@@ -1,5 +1,5 @@
 use std::{
-    collections::{BinaryHeap, HashMap},
+    collections::HashMap,
     time::{Duration, Instant},
 };
 
@@ -11,8 +11,8 @@ fn main() {
     let (template, rules) = parse(INPUT);
 
     dbg!(time(|| score(polymerize(template, &rules, 10).chars())));
-    dbg!(time(|| score(polymerize_mem_bounded(template, &rules, 10))));
-    dbg!(time(|| score(polymerize_mem_bounded(template, &rules, 40))));
+    dbg!(time(|| score_fast(template, &rules, 10)));
+    dbg!(time(|| score_fast(template, &rules, 40)));
 }
 
 fn time<F, T>(f: F) -> (T, Duration)
@@ -79,83 +79,10 @@ fn polymerize(template: &str, rules: &HashMap<&str, u8>, steps: usize) -> String
     String::from_utf8(out).unwrap()
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Pair {
-    step: u32,
-    ord: u64,
-    left: char,
-    right: char,
-}
-
-fn polymerize_mem_bounded(
-    template: &str,
-    rules: &HashMap<&str, u8>,
-    steps: usize,
-) -> impl Iterator<Item = char> {
-    let steps: u32 = steps as _;
-
-    let mut better_sules = HashMap::new();
-    for (&pair, &insert) in rules {
-        let mut chars = pair.chars();
-        let left = chars.next().unwrap();
-        let right = chars.next().unwrap();
-        better_sules.insert((left, right), insert.into());
-    }
-    let rules = better_sules;
-
-    let mut ord = u64::MAX;
-    let mut heap = BinaryHeap::new();
-    for (left, right) in template.chars().zip(template.chars().skip(1)) {
-        heap.push(Pair {
-            step: 0,
-            ord,
-            left,
-            right,
-        });
-        ord -= 1;
-    }
-
-    std::iter::from_fn(move || {
-        while let Some(Pair {
-            step, left, right, ..
-        }) = heap.pop()
-        {
-            if step >= steps {
-                if heap.is_empty() && step == steps {
-                    heap.push(Pair {
-                        step: u32::MAX,
-                        ord: 0,
-                        left: right,
-                        right,
-                    });
-                }
-                return Some(left);
-            } else {
-                let insert = rules[&(left, right)];
-                heap.push(Pair {
-                    step: step + 1,
-                    ord,
-                    left,
-                    right: insert,
-                });
-                heap.push(Pair {
-                    step: step + 1,
-                    ord: ord - 1,
-                    left: insert,
-                    right,
-                });
-                ord -= 2;
-            }
-        }
-        None
-    })
-}
-
 fn score(polymer: impl Iterator<Item = char>) -> usize {
     let mut counts: HashMap<char, usize> = HashMap::new();
 
     for element in polymer {
-        // dbg!(element);
         let count = counts.entry(element).or_default();
         *count += 1;
     }
@@ -163,7 +90,54 @@ fn score(polymer: impl Iterator<Item = char>) -> usize {
     let most_common = counts.iter().max_by_key(|&(_, c)| c).unwrap();
     let least_common = counts.iter().min_by_key(|&(_, c)| c).unwrap();
 
-    // dbg!(polymer, &most_common, &least_common);
+    most_common.1 - least_common.1
+}
+
+fn score_fast(template: &str, rules: &HashMap<&str, u8>, steps: usize) -> usize {
+    // To use `slice::windows()` we take advantage of knowing that all elements are (uppercase)
+    // ASCII letters; by asserting this here, we can simply unwrap any later fallible conversions
+    // from &[u8]/Vec<u8> to &str/String
+    assert!(template.is_ascii());
+
+    let mut pairs: HashMap<(u8, u8), usize> = HashMap::new();
+
+    for pair in template.as_bytes().windows(2) {
+        let count = pairs.entry((pair[0], pair[1])).or_default();
+        *count += 1;
+    }
+
+    for _step in 0..steps {
+        let mut new_pairs = HashMap::new();
+        for (&pair, &count) in pairs.iter() {
+            let pair_arr = [pair.0, pair.1];
+            let pair_str = std::str::from_utf8(&pair_arr).unwrap();
+
+            let insert = rules[pair_str];
+            let left = (pair.0, insert);
+            let right = (insert, pair.1);
+
+            for new in [left, right] {
+                let new_count = new_pairs.entry(new).or_default();
+                *new_count += count;
+            }
+        }
+        pairs = new_pairs;
+    }
+
+    let mut elements: HashMap<char, usize> = HashMap::new();
+
+    for (pair, count) in pairs {
+        let elem_count = elements.entry(pair.0.into()).or_default();
+        *elem_count += count;
+    }
+
+    *elements
+        .entry(template.chars().last().unwrap())
+        .or_default() += 1;
+
+    let most_common = elements.iter().max_by_key(|&(_, c)| c).unwrap();
+    let least_common = elements.iter().min_by_key(|&(_, c)| c).unwrap();
+
     most_common.1 - least_common.1
 }
 
@@ -197,22 +171,19 @@ mod tests {
     fn sample_polymer_after_10_steps() {
         let (template, rules) = parse(SAMPLE);
         assert_eq!(score(polymerize(template, &rules, 10).chars()), 1588);
-        assert_eq!(score(polymerize_mem_bounded(template, &rules, 10)), 1588);
+        assert_eq!(score_fast(template, &rules, 10), 1588);
     }
 
     #[test]
-    #[ignore] // requires, effectively, infinite time
     fn sample_polymer_after_40_steps() {
         let (template, rules) = parse(SAMPLE);
-        assert_eq!(
-            score(polymerize_mem_bounded(template, &rules, 40)),
-            2188189693529
-        );
+        assert_eq!(score_fast(template, &rules, 40), 2188189693529);
     }
 
     #[test]
     fn does_not_regres() {
         let (template, rules) = parse(INPUT);
         assert_eq!(score(polymerize(template, &rules, 10).chars()), 2797);
+        assert_eq!(score_fast(template, &rules, 40), 2926813379532);
     }
 }
