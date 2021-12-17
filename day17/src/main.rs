@@ -54,6 +54,24 @@ fn on_target(
         .any(|step| step_on_target(step, target))
 }
 
+// HACK:
+//
+// Hard code limits that have been found, by experimentation, to be suitable for the given
+// sample and input.
+//
+// There is some logic to their values, which could be incorporated in a future version of the
+// function responsible for finding velocities that are on target:
+//
+//  - the maximum number of steps should be larger than both horizontal and vertical spans
+//  from start position to the farthest coordinate (in that dimension) of the target region;
+//
+//  - the range of horizontal velocities to test should be close to the horizontal span from start
+//  position to the farthest coordinate of the target region;
+//
+//  - the range of vertical velocities to test should allow for both high absolute vx (where the
+//  absolute vertical velocity is like to be low) as well as high maximum y  (where the absolute
+//  horizontal velocity is likely to be low, and where the path will reach heights greater than
+//  both the start and target heights).
 const NAIVE_MAX_STEPS: usize = 300;
 const NAIVE_VX0_RANGE: RangeInclusive<i32> = -0..=300;
 const NAIVE_VY0_RANGE: RangeInclusive<i32> = -100..=100;
