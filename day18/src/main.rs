@@ -55,36 +55,52 @@ impl Number {
 
         Number { inner }
     }
+
+    fn left(&self) -> Option<Self> {
+        if let Element::Pair(left) = &self.inner.borrow().left {
+            Some(Number {
+                inner: left.clone(),
+            })
+        } else {
+            None
+        }
+    }
+
+    fn right(&self) -> Option<Self> {
+        if let Element::Pair(right) = &self.inner.borrow().right {
+            Some(Number {
+                inner: right.clone(),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 impl Inner {
-    // fn leftmost_leaf(self: Rc<Self>) -> Rc<Self> {
-    //     match &self.element {
-    //         Element::Leaf(_) => self,
-    //         Element::Pair { left, .. } => Rc::clone(left).leftmost_leaf(),
-    //     }
-    // }
+    fn leftmost_leaf(this: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
+        match &this.borrow().left {
+            Element::Leaf(_) => this.clone(),
+            Element::Pair(num) => Inner::leftmost_leaf(num),
+        }
+    }
 
-    // fn rightmost_leaf(self: Rc<Self>) -> Rc<Self> {
-    //     match &self.element {
-    //         Element::Leaf(_) => self,
-    //         Element::Pair { right, .. } => Rc::clone(right).rightmost_leaf(),
-    //     }
-    // }
+    fn first_leaf_to_the_left(this: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
+        let parent = &this.borrow().parent.upgrade().expect("already at the root");
+        Inner::leftmost_leaf(parent)
+    }
 
-    // fn first_left_left(self: Rc<Self>) -> Rc<Self> {
-    //     self.parent
-    //         .upgrade()
-    //         .expect("already at the root")
-    //         .rightmost_leaf()
-    // }
+    fn rightmost_leaf(this: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
+        match &this.borrow().right {
+            Element::Leaf(_) => this.clone(),
+            Element::Pair(num) => Inner::rightmost_leaf(num),
+        }
+    }
 
-    // fn first_right_right(self: Rc<Self>) -> Rc<Self> {
-    //     self.parent
-    //         .upgrade()
-    //         .expect("already at the root")
-    //         .leftmost_leaf()
-    // }
+    fn first_leaf_to_the_right(this: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
+        let parent = &this.borrow().parent.upgrade().expect("already at the root");
+        Inner::rightmost_leaf(parent)
+    }
 }
 
 impl std::fmt::Display for Number {
@@ -142,5 +158,16 @@ mod tests {
 
         assert!(left_parent.unwrap().ptr_eq(&expected));
         assert!(right_parent.unwrap().ptr_eq(&expected));
+    }
+
+    #[test]
+    fn find_the_first_leaf_to_the_right() {
+        let inner = Number::new(1.into(), 2.into());
+        let outer = Number::new(inner.into(), 3.into());
+
+        let right_leaf = Inner::first_leaf_to_the_right(&outer.left().unwrap().inner);
+
+        // FIXME
+        // assert_eq!(Rc::try_unwrap(right_leaf).unwrap().into_inner(), Element::Leaf(3));
     }
 }
