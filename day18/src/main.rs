@@ -40,6 +40,16 @@ impl From<Number> for Element {
     }
 }
 
+impl Element {
+    fn child_pair(&self) -> Option<Rc<RefCell<Inner>>> {
+        if let Element::Pair(child) = self {
+            Some(child.clone())
+        } else {
+            None
+        }
+    }
+}
+
 impl Number {
     fn new(left: Element, right: Element) -> Self {
         let inner = Rc::new(RefCell::new(Inner {
@@ -59,31 +69,22 @@ impl Number {
         Number { inner }
     }
 
-    fn left(&self) -> Option<Self> {
-        if let Element::Pair(left) = &self.inner.borrow().left {
-            Some(Number {
-                inner: left.clone(),
-            })
-        } else {
-            None
-        }
+    fn left_pair(&self) -> Option<Self> {
+        Inner::left_pair(&self.inner).map(|inner| Number { inner })
     }
 
-    fn right(&self) -> Option<Self> {
-        if let Element::Pair(right) = &self.inner.borrow().right {
-            Some(Number {
-                inner: right.clone(),
-            })
-        } else {
-            None
-        }
+    fn right_pair(&self) -> Option<Self> {
+        Inner::right_pair(&self.inner).map(|inner| Number { inner })
     }
 
     fn reduce(&mut self) {
         fn try_explode(this: Rc<RefCell<Inner>>, nested: usize) -> bool {
+            dbg!(nested, this.borrow().to_string());
+
             if nested == 4 {
                 if let Element::Leaf(left) = &this.borrow().left {
                     let left_leaf = Inner::first_leaf_to_the_left(&this);
+                    dbg!(left_leaf.get());
                     left_leaf.set(left_leaf.get() + left.get());
                 } else {
                     unreachable!();
@@ -91,17 +92,19 @@ impl Number {
 
                 if let Element::Leaf(right) = &this.borrow().right {
                     let right_leaf = Inner::first_leaf_to_the_right(&this);
+                    dbg!(right_leaf.get());
                     right_leaf.set(right_leaf.get() + right.get());
                 } else {
                     unreachable!();
                 }
 
                 if let Some(parent) = this.borrow().parent.upgrade() {
-                    match &parent.borrow().left {
-                        Element::Pair(left) if Rc::ptr_eq(left, &this) => {
-                            parent.borrow_mut().left = Element::from(0)
-                        }
-                        _ => parent.borrow_mut().right = Element::from(0),
+                    let mut parent = parent.borrow_mut();
+
+                    if matches!(&parent.left, Element::Pair(left) if Rc::ptr_eq(left, &this)) {
+                        parent.left = Element::from(0);
+                    } else {
+                        parent.right = Element::from(0);
                     }
                 } else {
                     unreachable!();
@@ -109,23 +112,57 @@ impl Number {
 
                 true
             } else {
-                if let Element::Pair(left) = &this.borrow().left {
-                    if try_explode(left.clone(), nested + 1) {
+                let children = [Inner::left_pair(&this), Inner::right_pair(&this)];
+
+                for child in children.into_iter().flatten() {
+                    if try_explode(child, nested + 1) {
                         return true;
                     }
-                }
-
-                if let Element::Pair(right) = &this.borrow().right {
-                    return try_explode(right.clone(), nested + 1);
                 }
 
                 false
             }
         }
 
-        if !try_explode(self.inner.clone(), 0) {
-            // TODO try_split
+        fn try_split(this: Rc<RefCell<Inner>>) -> bool {
+            fn try_split_element(element: &mut Element, parent: &Weak<RefCell<Inner>>) -> bool {
+                match element {
+                    Element::Leaf(num) => {
+                        let num = num.get();
+                        if num >= 10 {
+                            let new_left = (num as f64 / 2.).floor() as i32;
+                            let new_right = (num as f64 / 2.).ceil() as i32;
+                            let new_pair = Inner {
+                                left: Element::from(new_left),
+                                right: Element::from(new_right),
+                                parent: parent.clone(),
+                            };
+                            *element = Element::Pair(Rc::new(RefCell::new(new_pair)));
+                            return true;
+                        }
+                    }
+                    Element::Pair(child) => {
+                        let weak = Rc::downgrade(child);
+                        let mut child = child.borrow_mut();
+                        if try_split_element(&mut child.left, &weak)
+                            || try_split_element(&mut child.right, &weak)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                false
+            }
+
+            dbg!(this.borrow().to_string());
+
+            let root = Weak::new();
+            let mut this = this.borrow_mut();
+            try_split_element(&mut this.left, &root) || try_split_element(&mut this.right, &root)
         }
+
+        while try_explode(self.inner.clone(), 0) || try_split(self.inner.clone()) {}
     }
 }
 
@@ -194,6 +231,14 @@ impl Inner {
         let parent = &this.borrow().parent.upgrade().expect("already at the root");
         Inner::rightmost_leaf(parent)
     }
+
+    fn left_pair(this: &Rc<RefCell<Self>>) -> Option<Rc<RefCell<Self>>> {
+        this.borrow().left.child_pair()
+    }
+
+    fn right_pair(this: &Rc<RefCell<Self>>) -> Option<Rc<RefCell<Self>>> {
+        this.borrow().right.child_pair()
+    }
 }
 
 impl std::fmt::Display for Number {
@@ -258,7 +303,7 @@ mod tests {
         let inner = Number::new(1.into(), 2.into());
         let outer = Number::new(inner.into(), 3.into());
 
-        let right_leaf = Inner::first_leaf_to_the_right(&outer.left().unwrap().inner);
+        let right_leaf = Inner::first_leaf_to_the_right(&outer.left_pair().unwrap().inner);
         assert_eq!(right_leaf.get(), 3);
     }
 
@@ -267,7 +312,7 @@ mod tests {
         let inner = Number::new(2.into(), 3.into());
         let outer = Number::new(1.into(), inner.into());
 
-        let left_leaf = Inner::first_leaf_to_the_left(&outer.right().unwrap().inner);
+        let left_leaf = Inner::first_leaf_to_the_left(&outer.right_pair().unwrap().inner);
         assert_eq!(left_leaf.get(), 1);
     }
 
